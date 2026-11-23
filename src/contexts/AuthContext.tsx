@@ -29,7 +29,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
+  register: (name: string, email: string, password: string, otp?: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => void;
   updateUser: (updates: Partial<AuthUser>) => void;
 }
@@ -170,20 +170,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
+    async (name: string, email: string, password: string, otp?: string): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
       const trimmedName = name.trim();
       const trimmedEmail = email.trim().toLowerCase();
       const trimmedPassword = password.trim();
+      const cleanOtp = otp?.trim() || '';
 
       if (!trimmedName || !trimmedEmail || !trimmedPassword) {
         return { success: false, error: 'All fields are required.' };
+      }
+
+      if (!cleanOtp) {
+        return { success: false, error: 'A 6-digit verification code is required.' };
       }
 
       try {
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: trimmedName, email: trimmedEmail, password: trimmedPassword }),
+          body: JSON.stringify({
+            name: trimmedName,
+            email: trimmedEmail,
+            password: trimmedPassword,
+            otp: cleanOtp,
+          }),
         });
 
         const data = await res.json();
