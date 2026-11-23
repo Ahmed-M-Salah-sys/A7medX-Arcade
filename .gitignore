@@ -1,0 +1,41 @@
+# Dependency directories
+node_modules/
+/.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Local Environment Variables (secrets, DB URIs)
+.env*.local
+.env
+
+# Uploads & User-generated media (stored locally, not in git)
+public/uploads/*
+!public/uploads/.gitkeep
+public/uploads/games/*
+!public/uploads/games/.gitkeep
+public/uploads/images/*
+!public/uploads/images/.gitkeep
+
+# Local game archives backup
+data/archives/*
+!data/archives/.gitkeep
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db
+*.pem
+
+# TypeScript cache
+*.tsbuildinfo
+next-env.d.ts
