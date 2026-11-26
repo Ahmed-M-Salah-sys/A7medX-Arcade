@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { Game } from '@/types/game';
 import { GameCard } from './GameCard';
 import { EmptyState } from './EmptyState';
-import { Search, SlidersHorizontal, Sparkles, Filter } from 'lucide-react';
+import { Search, SlidersHorizontal, Filter } from 'lucide-react';
 
 interface GameGridProps {
   initialGames: Game[];
@@ -14,11 +15,27 @@ interface GameGridProps {
 const CATEGORIES = ['All', 'Horror', 'Action', 'Adventure', 'Indie', 'Web Games'];
 
 export function GameGrid({ initialGames }: GameGridProps) {
+  const { isLoggedIn } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
+
   const [games, setGames] = useState<Game[]>(initialGames);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('newest');
+
+  // Intercept guest interactions on Home page and redirect to login
+  const requireAuthAction = (e?: React.SyntheticEvent) => {
+    if (!isLoggedIn) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      router.push('/login?reason=auth_required');
+      return true;
+    }
+    return false;
+  };
 
   // Synchronize initial games or search params
   useEffect(() => {
@@ -117,7 +134,10 @@ export function GameGrid({ initialGames }: GameGridProps) {
             return (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={(e) => {
+                  if (requireAuthAction(e)) return;
+                  setSelectedCategory(cat);
+                }}
                 className={`min-h-[40px] px-3.5 sm:px-4 py-2 rounded-2xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-2 active:scale-95 ${
                   isSelected
                     ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25'
@@ -148,7 +168,19 @@ export function GameGrid({ initialGames }: GameGridProps) {
               type="text"
               placeholder="Filter current view..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={(e) => {
+                if (requireAuthAction(e)) {
+                  e.currentTarget.blur();
+                  return;
+                }
+              }}
+              onClick={(e) => {
+                if (requireAuthAction(e)) return;
+              }}
+              onChange={(e) => {
+                if (requireAuthAction(e)) return;
+                setSearchQuery(e.target.value);
+              }}
               className="w-full sm:w-56 pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dark:focus:ring-cyan-500/50 min-h-[40px]"
             />
           </div>
@@ -158,9 +190,18 @@ export function GameGrid({ initialGames }: GameGridProps) {
             <SlidersHorizontal className="w-4 h-4 text-slate-400 shrink-0 hidden sm:block" />
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onMouseDown={(e) => {
+                if (requireAuthAction(e)) return;
+              }}
+              onClick={(e) => {
+                if (requireAuthAction(e)) return;
+              }}
+              onChange={(e) => {
+                if (requireAuthAction(e)) return;
+                setSortBy(e.target.value);
+              }}
               aria-label="Sort games"
-              className="w-full sm:w-auto px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[40px]"
+              className="w-full sm:w-auto px-3.5 py-2.5 text-xs sm:text-sm rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 min-h-[40px] cursor-pointer"
             >
               <option value="newest">Newest Releases</option>
               <option value="popular">Most Viewed</option>

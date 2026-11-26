@@ -76,7 +76,7 @@ export function Navbar() {
 
   // Live search debounced fetch
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() || !isLoggedIn) {
       setSearchResults([]);
       setIsSearching(false);
       return;
@@ -99,10 +99,14 @@ export function Navbar() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, isLoggedIn]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoggedIn) {
+      router.push('/login?reason=auth_required');
+      return;
+    }
     if (searchQuery.trim()) {
       setIsSearchOpen(false);
       router.push(`/?search=${encodeURIComponent(searchQuery.trim())}`);
@@ -151,7 +155,12 @@ export function Navbar() {
                   placeholder="Search games, genres..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => {
+                  onFocus={(e) => {
+                    if (!isLoggedIn) {
+                      e.currentTarget.blur();
+                      router.push('/login?reason=auth_required');
+                      return;
+                    }
                     if (searchResults.length > 0) setIsSearchOpen(true);
                   }}
                   className="w-full pl-10 pr-10 py-2 sm:py-2.5 text-sm rounded-xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 dark:focus:ring-cyan-500/30 focus:border-purple-500 dark:focus:border-cyan-500 transition-all"
@@ -214,6 +223,12 @@ export function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
+                    onClick={(e) => {
+                      if (!isLoggedIn && link.href !== '/') {
+                        e.preventDefault();
+                        router.push(`/login?redirect=${encodeURIComponent(link.href)}&reason=auth_required`);
+                      }
+                    }}
                     className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
                       isActive
                         ? 'bg-purple-600/10 dark:bg-cyan-500/10 text-purple-600 dark:text-cyan-400 shadow-sm'
@@ -271,7 +286,7 @@ export function Navbar() {
 
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer"
                   aria-label="Logout"
                 >
                   <LogOut className="w-4 h-4" />
@@ -279,12 +294,12 @@ export function Navbar() {
                 </button>
               </div>
             ) : (
-              // Logged Out State
+              // Logged Out State — Prominent Sign In / Register CTA
               <Link
                 href="/login"
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-sm transition-all"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white shadow-md shadow-purple-500/20 hover:scale-105 active:scale-95 transition-all"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="w-4 h-4 text-cyan-200" />
                 <span>Sign In / Register</span>
               </Link>
             )}
@@ -324,6 +339,14 @@ export function Navbar() {
               placeholder="Search games..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={(e) => {
+                if (!isLoggedIn) {
+                  e.currentTarget.blur();
+                  setMobileMenuOpen(false);
+                  router.push('/login?reason=auth_required');
+                  return;
+                }
+              }}
               className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 min-h-[44px]"
             />
           </form>
@@ -345,7 +368,13 @@ export function Navbar() {
 
             <Link
               href="/about"
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={(e) => {
+                setMobileMenuOpen(false);
+                if (!isLoggedIn) {
+                  e.preventDefault();
+                  router.push('/login?redirect=%2Fabout&reason=auth_required');
+                }
+              }}
               className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-base font-semibold min-h-[44px] transition-colors ${
                 pathname === '/about'
                   ? 'bg-purple-600/10 dark:bg-cyan-500/10 text-purple-600 dark:text-cyan-400'
@@ -415,9 +444,9 @@ export function Navbar() {
                 <Link
                   href="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-3.5 py-3 rounded-xl text-base font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-white min-h-[44px]"
+                  className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 text-white shadow-lg shadow-purple-500/25 min-h-[44px]"
                 >
-                  <LogIn className="w-5 h-5 shrink-0" />
+                  <LogIn className="w-5 h-5 shrink-0 text-cyan-200" />
                   <span>Sign In / Register</span>
                 </Link>
               )}

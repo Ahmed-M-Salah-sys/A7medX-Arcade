@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Eye, Download, Heart, Monitor, Globe, Play, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { Eye, Download, Heart, Monitor, Globe, Play } from 'lucide-react';
 import { Game } from '@/types/game';
 import { formatNumber } from '@/lib/utils';
 
@@ -10,6 +12,17 @@ interface GameCardProps {
 }
 
 export function GameCard({ game }: GameCardProps) {
+  const { isLoggedIn } = useAuth();
+  const router = useRouter();
+
+  const handleInteraction = (e: React.MouseEvent) => {
+    if (!isLoggedIn) {
+      e.preventDefault();
+      e.stopPropagation();
+      router.push(`/login?redirect=${encodeURIComponent(`/games/${game.slug}`)}&reason=auth_required`);
+    }
+  };
+
   // Map genre to distinctive aesthetic badge colors
   const genreColors: Record<string, string> = {
     horror: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30',
@@ -26,11 +39,16 @@ export function GameCard({ game }: GameCardProps) {
 
   return (
     <div
+      onClick={handleInteraction}
       onContextMenu={(e) => e.preventDefault()}
-      className="group relative flex flex-col rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 hover:border-purple-500/50 dark:hover:border-cyan-500/50 shadow-sm hover:shadow-2xl hover:shadow-cyan-500/10 transition-all duration-300 hover:-translate-y-1 select-none"
+      className="group relative flex flex-col rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 hover:border-purple-500/50 dark:hover:border-cyan-500/50 shadow-sm hover:shadow-2xl hover:shadow-cyan-500/10 transition-all duration-300 hover:-translate-y-1 select-none cursor-pointer"
     >
       {/* Thumbnail Area */}
-      <Link href={`/games/${game.slug}`} className="relative block aspect-[16/10] overflow-hidden bg-slate-950">
+      <Link
+        href={`/games/${game.slug}`}
+        onClick={handleInteraction}
+        className="relative block aspect-[16/10] overflow-hidden bg-slate-950"
+      >
         {game.coverImage ? (
           <img
             src={game.coverImage}
@@ -84,7 +102,7 @@ export function GameCard({ game }: GameCardProps) {
       {/* Content Area */}
       <div className="flex-1 p-5 flex flex-col justify-between">
         <div>
-          <Link href={`/games/${game.slug}`}>
+          <Link href={`/games/${game.slug}`} onClick={handleInteraction}>
             <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-1 mb-1.5">
               {game.title}
             </h4>
@@ -113,6 +131,7 @@ export function GameCard({ game }: GameCardProps) {
 
           <Link
             href={`/games/${game.slug}`}
+            onClick={handleInteraction}
             className="font-semibold text-purple-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
           >
             <span>Details</span>

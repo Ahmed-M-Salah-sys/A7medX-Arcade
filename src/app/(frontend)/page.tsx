@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getGames, getProfile } from '@/lib/db';
 import { GameGrid } from '@/components/GameGrid';
 import { AdminHeroButton } from '@/components/AdminHeroButton';
+import { MeetDeveloperButton } from '@/components/MeetDeveloperButton';
 import { Gamepad2, Sparkles, Shield, ArrowRight, User } from 'lucide-react';
 
 // Force dynamic rendering to ensure updates reflect instantly without caching
@@ -53,13 +54,7 @@ export default async function HomePage() {
               <span>Explore Games</span>
             </a>
 
-            <Link
-              href="/about"
-              className="px-6 py-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-sm sm:text-base hover:border-purple-500/50 dark:hover:border-cyan-500/50 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-all flex items-center gap-2"
-            >
-              <User className="w-4 h-4 text-purple-500 dark:text-cyan-400" />
-              <span>{`Meet ${developerName}`}</span>
-            </Link>
+            <MeetDeveloperButton developerName={developerName} />
 
             {/* Admin Dashboard CTA is rendered only when logged in as Admin */}
             <AdminHeroButton />
