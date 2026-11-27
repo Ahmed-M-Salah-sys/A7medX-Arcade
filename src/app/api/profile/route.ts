@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProfile, updateProfile } from '@/lib/db';
 import { saveUploadedFile } from '@/lib/upload';
+import { extractErrorMessage } from '@/lib/cloudinary';
 import { Profile } from '@/types/profile';
 import { requireAdmin } from '@/lib/auth';
 
@@ -21,8 +22,8 @@ export async function GET() {
       }
     );
   } catch (error: unknown) {
-    console.error('API Error in GET /api/profile:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve profile data';
+    console.error('[GET /api/profile]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to retrieve profile data');
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }
@@ -147,8 +148,8 @@ export async function PUT(request: NextRequest) {
       message: 'Profile updated successfully'
     });
   } catch (error: unknown) {
-    console.error('API Error in PUT /api/profile:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred while updating profile';
+    console.error('[PUT /api/profile]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to update profile');
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGames, createGame } from '@/lib/db';
 import { saveUploadedFile } from '@/lib/upload';
+import { extractErrorMessage } from '@/lib/cloudinary';
 import { requireAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -204,8 +205,8 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: unknown) {
-    console.error('API Error in POST /api/games:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to publish game';
+    console.error('[POST /api/games]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to publish game');
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

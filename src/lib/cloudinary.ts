@@ -17,6 +17,56 @@ export interface CloudinaryUploadResult {
 }
 
 /**
+ * Extract a meaningful error message from any error value (Error instance, Cloudinary POJO error, string, or object).
+ */
+export function extractErrorMessage(err: unknown, fallback: string = 'An unknown error occurred'): string {
+  if (!err) return fallback;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (err instanceof Error && err.message?.trim()) return err.message.trim();
+
+  if (typeof err === 'object' && err !== null) {
+    const record = err as Record<string, unknown>;
+    // Cloudinary standard error shape: { message: '...', http_code: 400 }
+    if (typeof record.message === 'string' && record.message.trim()) {
+      const code = record.http_code ? ` (HTTP ${record.http_code})` : '';
+      return `${record.message.trim()}${code}`;
+    }
+    // Nested error: { error: { message: '...', ... } } or { error: '...' }
+    if (record.error) {
+      if (typeof record.error === 'string' && record.error.trim()) {
+        return record.error.trim();
+      }
+      if (typeof record.error === 'object' && record.error !== null) {
+        const nested = record.error as Record<string, unknown>;
+        if (typeof nested.message === 'string' && nested.message.trim()) {
+          return nested.message.trim();
+        }
+      }
+    }
+    // Mongoose or database error: { errmsg: '...' }
+    if (typeof record.errmsg === 'string' && record.errmsg.trim()) {
+      return record.errmsg.trim();
+    }
+    // Axios or fetch error: { data: { message: '...' } }
+    if (record.data && typeof record.data === 'object' && record.data !== null) {
+      const data = record.data as Record<string, unknown>;
+      if (typeof data.message === 'string' && data.message.trim()) {
+        return data.message.trim();
+      }
+    }
+    try {
+      const str = JSON.stringify(err);
+      if (str && str !== '{}') return str;
+    } catch {
+      // ignore serialization error
+    }
+  }
+
+  const str = String(err);
+  return str && str !== '[object Object]' ? str : fallback;
+}
+
+/**
  * Clean environment variable string by trimming whitespace and stripping surrounding quotes.
  */
 function cleanEnv(val: string | undefined): string {
@@ -93,18 +143,24 @@ export async function uploadToCloudinary(
       throw new Error('Image data is empty');
     }
 
-    const result = await cloudinary.uploader.upload(trimmed, {
-      folder,
-      resource_type: 'image',
-    });
+    try {
+      const result = await cloudinary.uploader.upload(trimmed, {
+        folder,
+        resource_type: 'image',
+      });
 
-    return {
-      url: result.secure_url,
-      size: formatFileSize(result.bytes || 0),
-      rawBytes: result.bytes || 0,
-      filename: result.original_filename || 'image',
-      publicId: result.public_id,
-    };
+      return {
+        url: result.secure_url,
+        size: formatFileSize(result.bytes || 0),
+        rawBytes: result.bytes || 0,
+        filename: result.original_filename || 'image',
+        publicId: result.public_id,
+      };
+    } catch (uploadErr: unknown) {
+      console.error('[Cloudinary uploader.upload string Error]:', uploadErr);
+      const detail = extractErrorMessage(uploadErr, 'Upload rejected by Cloudinary');
+      throw new Error(`Cloudinary upload failed: ${detail}`);
+    }
   }
 
   // 2. Handle File or Blob input
@@ -117,18 +173,24 @@ export async function uploadToCloudinary(
     const base64Data = buffer.toString('base64');
     const dataUri = `data:${mimeType};base64,${base64Data}`;
 
-    const result = await cloudinary.uploader.upload(dataUri, {
-      folder,
-      resource_type: 'image',
-    });
+    try {
+      const result = await cloudinary.uploader.upload(dataUri, {
+        folder,
+        resource_type: 'image',
+      });
 
-    return {
-      url: result.secure_url,
-      size: formatFileSize(result.bytes || rawBytes),
-      rawBytes: result.bytes || rawBytes,
-      filename: result.original_filename || filename,
-      publicId: result.public_id,
-    };
+      return {
+        url: result.secure_url,
+        size: formatFileSize(result.bytes || rawBytes),
+        rawBytes: result.bytes || rawBytes,
+        filename: result.original_filename || filename,
+        publicId: result.public_id,
+      };
+    } catch (uploadErr: unknown) {
+      console.error('[Cloudinary uploader.upload file Error]:', uploadErr);
+      const detail = extractErrorMessage(uploadErr, 'Upload rejected by Cloudinary');
+      throw new Error(`Cloudinary upload failed: ${detail}`);
+    }
   }
 
   throw new Error('Unsupported file format for Cloudinary upload');

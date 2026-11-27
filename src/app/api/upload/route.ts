@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveUploadedFile } from '@/lib/upload';
+import { extractErrorMessage } from '@/lib/cloudinary';
 import { requireAdmin } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -30,8 +31,8 @@ export async function POST(request: NextRequest) {
       message: 'File uploaded successfully'
     });
   } catch (error: unknown) {
-    console.error('Upload API error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
+    console.error('[POST /api/upload]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to upload file');
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }

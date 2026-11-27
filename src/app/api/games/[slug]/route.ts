@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGameBySlug, updateGame, deleteGame } from '@/lib/db';
 import { saveUploadedFile } from '@/lib/upload';
+import { extractErrorMessage } from '@/lib/cloudinary';
 import { requireAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -159,8 +160,8 @@ export async function PUT(
       message: 'Game updated successfully'
     });
   } catch (error: unknown) {
-    console.error('API Error in PUT /api/games/[slug]:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update game';
+    console.error('[PUT /api/games/[slug]]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to update game');
     return NextResponse.json(
       { success: false, error: errorMessage },
       { status: 500 }
@@ -191,10 +192,11 @@ export async function DELETE(
       success: true,
       message: 'Game deleted successfully'
     });
-  } catch (error) {
-    console.error('API Error in DELETE /api/games/[slug]:', error);
+  } catch (error: unknown) {
+    console.error('[DELETE /api/games/[slug]]', error);
+    const errorMessage = extractErrorMessage(error, 'Failed to delete game');
     return NextResponse.json(
-      { success: false, error: 'Failed to delete game' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
