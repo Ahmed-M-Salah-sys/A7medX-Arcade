@@ -67,33 +67,72 @@ export function extractErrorMessage(err: unknown, fallback: string = 'An unknown
 }
 
 /**
- * Clean environment variable string by trimming whitespace and stripping surrounding quotes.
+ * Clean environment variable string by trimming whitespace, stripping surrounding quotes,
+ * and removing stray carriage returns or newlines.
  */
 function cleanEnv(val: string | undefined): string {
   if (!val) return '';
-  return val.trim().replace(/^["']|["']$/g, '').trim();
+  let str = val.trim();
+  while ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+    str = str.slice(1, -1).trim();
+  }
+  return str.replace(/[\r\n\t]/g, '').trim();
+}
+
+/**
+ * Safely format secret string for diagnostic logging without exposing the raw secret.
+ * Shows first/last character and total length.
+ */
+function maskSecret(val: string): string {
+  if (!val) return '(empty)';
+  if (val.length <= 4) return `(len=${val.length})`;
+  return `${val[0]}***${val[val.length - 1]} (len=${val.length})`;
+}
+
+/**
+ * Log diagnostic details on upload or signature errors.
+ */
+function logUploadDiagnostic(
+  type: 'string' | 'file',
+  error: unknown,
+  config: { cloud_name: string; api_key: string; api_secret: string },
+  folder: string
+) {
+  const detail = extractErrorMessage(error, 'Unknown Cloudinary error');
+  console.error(`[Cloudinary uploader.upload ${type} Error]:`, {
+    error: detail,
+    cloud_name: config.cloud_name,
+    api_key_masked: config.api_key ? `${config.api_key.slice(0, 4)}...${config.api_key.slice(-4)} (len=${config.api_key.length})` : '(empty)',
+    api_secret_diagnostic: maskSecret(config.api_secret),
+    folder,
+    is_signature_or_auth_error: detail.toLowerCase().includes('signature') || detail.toLowerCase().includes('401') || detail.toLowerCase().includes('mismatch'),
+  });
 }
 
 /**
  * Configure and return Cloudinary credentials dynamically at runtime.
  * Reads environment variables fresh on each invocation to prevent build-time caching issues on Vercel.
+ * Explicitly prioritizes individual env vars (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)
+ * and prevents any stale CLOUDINARY_URL from lingering or overriding them.
  */
 export function getCloudinaryConfig() {
   let cloud_name = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME);
   let api_key = cleanEnv(process.env.CLOUDINARY_API_KEY || process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
   let api_secret = cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
-  // Fallback to CLOUDINARY_URL if individual variables are omitted
+  // If explicit individual variables are provided, they strictly take priority over CLOUDINARY_URL!
+  // Only fall back to CLOUDINARY_URL if one or more individual variables are missing.
   if ((!cloud_name || !api_key || !api_secret) && process.env.CLOUDINARY_URL) {
+    const rawUrl = cleanEnv(process.env.CLOUDINARY_URL);
     try {
-      const url = new URL(cleanEnv(process.env.CLOUDINARY_URL));
+      const url = new URL(rawUrl);
       if (url.protocol === 'cloudinary:') {
         api_key = api_key || decodeURIComponent(url.username);
         api_secret = api_secret || decodeURIComponent(url.password);
         cloud_name = cloud_name || url.hostname;
       }
     } catch {
-      const match = cleanEnv(process.env.CLOUDINARY_URL).match(/cloudinary:\/\/([^:]+):([^@]+)@(.+)/);
+      const match = rawUrl.match(/cloudinary:\/\/([^:]+):([^@]+)@(.+)/);
       if (match) {
         api_key = api_key || match[1];
         api_secret = api_secret || match[2];
@@ -114,7 +153,13 @@ export function getCloudinaryConfig() {
     );
   }
 
-  // Always reconfigure Cloudinary cleanly before operations
+  // Sync process.env.CLOUDINARY_URL with active credentials to prevent SDK from reading a stale URL
+  process.env.CLOUDINARY_URL = `cloudinary://${api_key}:${api_secret}@${cloud_name}`;
+
+  // Reset internal Cloudinary SDK config to wipe any stale configuration
+  cloudinary.config(true);
+
+  // Set active configuration explicitly on SDK
   cloudinary.config({
     cloud_name,
     api_key,
@@ -134,7 +179,17 @@ export async function uploadToCloudinary(
   folder: string = 'a7med-arcade'
 ): Promise<CloudinaryUploadResult> {
   // Read and configure credentials fresh at runtime
-  getCloudinaryConfig();
+  const config = getCloudinaryConfig();
+
+  // Explicit upload parameters without extra unexpected signed fields
+  const uploadOptions = {
+    folder,
+    resource_type: 'image' as const,
+    cloud_name: config.cloud_name,
+    api_key: config.api_key,
+    api_secret: config.api_secret,
+    secure: true,
+  };
 
   // 1. Handle string input (base64 Data URI or remote URL)
   if (typeof file === 'string') {
@@ -144,10 +199,7 @@ export async function uploadToCloudinary(
     }
 
     try {
-      const result = await cloudinary.uploader.upload(trimmed, {
-        folder,
-        resource_type: 'image',
-      });
+      const result = await cloudinary.uploader.upload(trimmed, uploadOptions);
 
       return {
         url: result.secure_url,
@@ -157,9 +209,12 @@ export async function uploadToCloudinary(
         publicId: result.public_id,
       };
     } catch (uploadErr: unknown) {
-      console.error('[Cloudinary uploader.upload string Error]:', uploadErr);
+      logUploadDiagnostic('string', uploadErr, config, folder);
       const detail = extractErrorMessage(uploadErr, 'Upload rejected by Cloudinary');
-      throw new Error(`Cloudinary upload failed: ${detail}`);
+      const hint = detail.toLowerCase().includes('signature')
+        ? ` (Env check: cloud=${config.cloud_name}, key=${config.api_key.slice(0, 4)}..., secret=${maskSecret(config.api_secret)})`
+        : '';
+      throw new Error(`Cloudinary upload failed: ${detail}${hint}`);
     }
   }
 
@@ -174,10 +229,7 @@ export async function uploadToCloudinary(
     const dataUri = `data:${mimeType};base64,${base64Data}`;
 
     try {
-      const result = await cloudinary.uploader.upload(dataUri, {
-        folder,
-        resource_type: 'image',
-      });
+      const result = await cloudinary.uploader.upload(dataUri, uploadOptions);
 
       return {
         url: result.secure_url,
@@ -187,9 +239,12 @@ export async function uploadToCloudinary(
         publicId: result.public_id,
       };
     } catch (uploadErr: unknown) {
-      console.error('[Cloudinary uploader.upload file Error]:', uploadErr);
+      logUploadDiagnostic('file', uploadErr, config, folder);
       const detail = extractErrorMessage(uploadErr, 'Upload rejected by Cloudinary');
-      throw new Error(`Cloudinary upload failed: ${detail}`);
+      const hint = detail.toLowerCase().includes('signature')
+        ? ` (Env check: cloud=${config.cloud_name}, key=${config.api_key.slice(0, 4)}..., secret=${maskSecret(config.api_secret)})`
+        : '';
+      throw new Error(`Cloudinary upload failed: ${detail}${hint}`);
     }
   }
 
