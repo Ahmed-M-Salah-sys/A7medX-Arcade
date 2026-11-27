@@ -10,11 +10,11 @@ export interface SavedFileResult {
 }
 
 /**
- * Upload an image file (cover, screenshot, avatar) to Cloudinary.
- * Stores the returned secure HTTPS URL (res.cloudinary.com) without touching the local disk.
+ * Upload an image file (File, Blob, base64 Data URI, or URL) to Cloudinary.
+ * Stores the returned secure HTTPS URL (res.cloudinary.com) without touching local disk.
  */
 export async function saveUploadedFile(
-  file: File,
+  file: File | Blob | string,
   prefix: string = 'upload',
   category?: string
 ): Promise<SavedFileResult> {

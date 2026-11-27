@@ -4,14 +4,27 @@ import { saveUploadedFile } from '@/lib/upload';
 import { Profile } from '@/types/profile';
 import { requireAdmin } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   try {
     const profile = await getProfile();
-    return NextResponse.json({ success: true, profile });
-  } catch (error) {
-    console.error('API Error in GET /api/profile:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to retrieve profile data' },
+      { success: true, profile },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      }
+    );
+  } catch (error: unknown) {
+    console.error('API Error in GET /api/profile:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to retrieve profile data';
+    return NextResponse.json(
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -30,15 +43,23 @@ export async function PUT(request: NextRequest) {
       const formData = await request.formData();
       const updateData: Partial<Profile> = {};
 
-      // Check for uploaded file
-      const file = (formData.get('avatarFile') || formData.get('avatar') || formData.get('file')) as File | null;
-      if (file && typeof file === 'object' && 'arrayBuffer' in file && file.size > 0) {
-        const saved = await saveUploadedFile(file, 'avatar');
+      // Check for uploaded file or base64 avatar
+      const file = formData.get('avatarFile') || formData.get('avatar') || formData.get('file');
+      if (file && typeof file === 'object' && 'arrayBuffer' in file && (file as File).size > 0) {
+        const saved = await saveUploadedFile(file as File, 'avatar');
+        updateData.avatarUrl = saved.url;
+      } else if (typeof file === 'string' && file.trim().startsWith('data:image/')) {
+        const saved = await saveUploadedFile(file.trim(), 'avatar');
         updateData.avatarUrl = saved.url;
       } else {
-        const existingAvatar = formData.get('avatarUrl')?.toString();
+        const existingAvatar = formData.get('avatarUrl')?.toString()?.trim();
         if (existingAvatar) {
-          updateData.avatarUrl = existingAvatar;
+          if (existingAvatar.startsWith('data:image/')) {
+            const saved = await saveUploadedFile(existingAvatar, 'avatar');
+            updateData.avatarUrl = saved.url;
+          } else {
+            updateData.avatarUrl = existingAvatar;
+          }
         }
       }
 
@@ -98,7 +119,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Handle Application JSON
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
 
     const nameVal = body.displayName !== undefined ? body.displayName : body.name;
     if (nameVal !== undefined) {
@@ -112,6 +133,12 @@ export async function PUT(request: NextRequest) {
       body.displayName = nameVal.trim();
     }
 
+    // If avatarUrl is sent as a base64 Data URI in JSON body, upload to Cloudinary
+    if (body.avatarUrl && typeof body.avatarUrl === 'string' && body.avatarUrl.trim().startsWith('data:image/')) {
+      const saved = await saveUploadedFile(body.avatarUrl.trim(), 'avatar');
+      body.avatarUrl = saved.url;
+    }
+
     const updatedProfile = await updateProfile(body);
 
     return NextResponse.json({
@@ -119,10 +146,11 @@ export async function PUT(request: NextRequest) {
       profile: updatedProfile,
       message: 'Profile updated successfully'
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('API Error in PUT /api/profile:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred while updating profile';
     return NextResponse.json(
-      { success: false, error: 'Failed to update profile' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

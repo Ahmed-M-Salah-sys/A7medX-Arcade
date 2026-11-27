@@ -1,13 +1,5 @@
 import { v2 as cloudinary } from 'cloudinary';
 
-// Configure Cloudinary with serverless environment variables
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
-
 export function formatFileSize(bytes: number): string {
   if (bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -25,49 +17,102 @@ export interface CloudinaryUploadResult {
 }
 
 /**
- * Upload an image file buffer directly to Cloudinary without writing to local disk.
- * Fully compatible with Vercel serverless functions.
+ * Configure and return Cloudinary credentials, trimming any leading/trailing whitespace.
  */
-export async function uploadToCloudinary(
-  file: File | Blob,
-  folder: string = 'a7med-arcade'
-): Promise<CloudinaryUploadResult> {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+export function getCloudinaryConfig() {
+  const cloud_name = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const api_key = process.env.CLOUDINARY_API_KEY?.trim();
+  const api_secret = process.env.CLOUDINARY_API_SECRET?.trim();
 
-  if (!cloudName || !apiKey || !apiSecret || cloudName === 'your-cloud-name') {
+  if (
+    !cloud_name ||
+    !api_key ||
+    !api_secret ||
+    cloud_name === 'your-cloud-name' ||
+    api_key === 'your-api-key' ||
+    api_secret === 'your-api-secret'
+  ) {
     throw new Error(
-      'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your environment variables.'
+      'Cloudinary is not properly configured. Please set valid CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your environment variables.'
     );
   }
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const rawBytes = buffer.length;
-  const filename = (file as File).name || 'image.png';
-
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        resource_type: 'image',
-      },
-      (error, result) => {
-        if (error || !result) {
-          return reject(error || new Error('Cloudinary upload stream failed'));
-        }
-        resolve({
-          url: result.secure_url,
-          size: formatFileSize(result.bytes || rawBytes),
-          rawBytes: result.bytes || rawBytes,
-          filename: result.original_filename || filename,
-          publicId: result.public_id,
-        });
-      }
-    );
-    uploadStream.end(buffer);
+  cloudinary.config({
+    cloud_name,
+    api_key,
+    api_secret,
+    secure: true,
   });
+
+  return { cloud_name, api_key, api_secret };
+}
+
+// Initial config attempt (safe on cold-start)
+if (process.env.CLOUDINARY_CLOUD_NAME) {
+  try {
+    getCloudinaryConfig();
+  } catch {
+    // ignore on cold-start if environment variables are not yet loaded
+  }
+}
+
+/**
+ * Upload an image file (File, Blob, base64 Data URI, or URL) directly to Cloudinary without writing to local disk.
+ * Fully compatible with Vercel serverless Node runtime.
+ */
+export async function uploadToCloudinary(
+  file: File | Blob | string,
+  folder: string = 'a7med-arcade'
+): Promise<CloudinaryUploadResult> {
+  // Ensure trimmed credentials are used
+  getCloudinaryConfig();
+
+  // 1. Handle string input (base64 Data URI or remote URL)
+  if (typeof file === 'string') {
+    const trimmed = file.trim();
+    if (!trimmed) {
+      throw new Error('Image data is empty');
+    }
+
+    const result = await cloudinary.uploader.upload(trimmed, {
+      folder,
+      resource_type: 'image',
+    });
+
+    return {
+      url: result.secure_url,
+      size: formatFileSize(result.bytes || 0),
+      rawBytes: result.bytes || 0,
+      filename: result.original_filename || 'image',
+      publicId: result.public_id,
+    };
+  }
+
+  // 2. Handle File or Blob input
+  if (typeof file === 'object' && file && 'arrayBuffer' in file) {
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const rawBytes = buffer.length;
+    const filename = (file as File).name || 'image.png';
+    const mimeType = (file as File).type || 'image/png';
+    const base64Data = buffer.toString('base64');
+    const dataUri = `data:${mimeType};base64,${base64Data}`;
+
+    const result = await cloudinary.uploader.upload(dataUri, {
+      folder,
+      resource_type: 'image',
+    });
+
+    return {
+      url: result.secure_url,
+      size: formatFileSize(result.bytes || rawBytes),
+      rawBytes: result.bytes || rawBytes,
+      filename: result.original_filename || filename,
+      publicId: result.public_id,
+    };
+  }
+
+  throw new Error('Unsupported file format for Cloudinary upload');
 }
 
 export default cloudinary;

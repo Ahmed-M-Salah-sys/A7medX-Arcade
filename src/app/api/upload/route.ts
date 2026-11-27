@@ -29,10 +29,11 @@ export async function POST(request: NextRequest) {
       filename: saved.filename,
       message: 'File uploaded successfully'
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Upload API error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to upload file';
     return NextResponse.json(
-      { success: false, error: 'Failed to upload file' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

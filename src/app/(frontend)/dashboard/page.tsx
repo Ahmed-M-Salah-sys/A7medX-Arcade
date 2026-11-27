@@ -448,8 +448,8 @@ function DashboardContent() {
         headers: authHeaders(),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({ success: false, error: 'Failed to parse response from server' }));
+      if (res.ok && data.success) {
         setProfile(data.profile);
         if (data.profile?.avatarUrl) {
           setProfileForm((prev) => ({ ...prev, avatarUrl: data.profile.avatarUrl }));
@@ -469,11 +469,13 @@ function DashboardContent() {
         setSelectedAvatarFile(null);
         showToast('About Me profile & photo updated successfully!');
       } else {
-        showToast(data.error || 'Failed to update profile', 'error');
+        const errorMsg = data.error || `Server error (${res.status}): Failed to update profile`;
+        showToast(errorMsg, 'error');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast('Network error updating profile', 'error');
+      const networkMsg = err instanceof Error ? err.message : 'Network error updating profile';
+      showToast(networkMsg, 'error');
     } finally {
       setIsSubmittingProfile(false);
     }
@@ -559,8 +561,8 @@ function DashboardContent() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => ({ success: false, error: 'Failed to parse response from server' }));
+      if (res.ok && data.success) {
         setProfile(data.profile);
         if (data.profile?.skillCategories) {
           setSkillCategories(data.profile.skillCategories);
@@ -570,11 +572,13 @@ function DashboardContent() {
         }
         showToast('Skills & Technical Arsenal updated and live!');
       } else {
-        showToast(data.error || 'Failed to update skills', 'error');
+        const errorMsg = data.error || `Server error (${res.status}): Failed to update skills`;
+        showToast(errorMsg, 'error');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast('Network error saving skills', 'error');
+      const networkMsg = err instanceof Error ? err.message : 'Network error saving skills';
+      showToast(networkMsg, 'error');
     } finally {
       setIsSubmittingSkills(false);
     }

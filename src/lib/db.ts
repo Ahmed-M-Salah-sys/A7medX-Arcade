@@ -223,7 +223,7 @@ export async function updateGame(slug: string, updateData: Partial<Game>): Promi
   const doc = await GameModel.findOneAndUpdate(
     { slug: slug.toLowerCase() },
     { $set: setData },
-    { new: true }
+    { returnDocument: 'after' }
   )
     .lean()
     .exec();
@@ -246,7 +246,7 @@ export async function incrementGameStat(
   const doc = await GameModel.findOneAndUpdate(
     { slug: slug.toLowerCase() },
     { $inc: { [field]: 1 }, $set: { updatedAt: new Date() } },
-    { new: true }
+    { returnDocument: 'after' }
   )
     .lean()
     .exec();
@@ -344,11 +344,34 @@ export async function updateProfile(data: Partial<Profile>): Promise<Profile> {
     updated.skills = legacySkills as Profile['skills'];
   }
 
-  await ProfileModel.findOneAndUpdate(
-    {},
-    { $set: { ...updated, updatedAt: new Date() } },
-    { upsert: true, new: true }
-  ).exec();
+  // Construct clean MongoDB update object without any immutable _id or id fields
+  const updateDoc: Record<string, unknown> = {
+    name: updated.name,
+    displayName: updated.displayName,
+    title: updated.title,
+    heroTagline: updated.heroTagline,
+    bio: updated.bio,
+    avatarUrl: updated.avatarUrl,
+    location: updated.location,
+    email: updated.email,
+    socialLinks: updated.socialLinks,
+    skills: updated.skills,
+    skillCategories: updated.skillCategories,
+    experienceYears: updated.experienceYears,
+    availableForHire: updated.availableForHire,
+    updatedAt: new Date(),
+  };
+
+  let profileDoc = await ProfileModel.findOne({}).exec();
+  if (profileDoc) {
+    await ProfileModel.findByIdAndUpdate(
+      profileDoc._id,
+      { $set: updateDoc },
+      { returnDocument: 'after', runValidators: true }
+    ).exec();
+  } else {
+    profileDoc = await ProfileModel.create(updateDoc);
+  }
 
   return updated;
 }
