@@ -17,26 +17,54 @@ export interface CloudinaryUploadResult {
 }
 
 /**
- * Configure and return Cloudinary credentials, trimming any leading/trailing whitespace.
+ * Clean environment variable string by trimming whitespace and stripping surrounding quotes.
+ */
+function cleanEnv(val: string | undefined): string {
+  if (!val) return '';
+  return val.trim().replace(/^["']|["']$/g, '').trim();
+}
+
+/**
+ * Configure and return Cloudinary credentials dynamically at runtime.
+ * Reads environment variables fresh on each invocation to prevent build-time caching issues on Vercel.
  */
 export function getCloudinaryConfig() {
-  const cloud_name = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const api_key = process.env.CLOUDINARY_API_KEY?.trim();
-  const api_secret = process.env.CLOUDINARY_API_SECRET?.trim();
+  let cloud_name = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME);
+  let api_key = cleanEnv(process.env.CLOUDINARY_API_KEY || process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY);
+  let api_secret = cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
-  if (
-    !cloud_name ||
-    !api_key ||
-    !api_secret ||
-    cloud_name === 'your-cloud-name' ||
-    api_key === 'your-api-key' ||
-    api_secret === 'your-api-secret'
-  ) {
+  // Fallback to CLOUDINARY_URL if individual variables are omitted
+  if ((!cloud_name || !api_key || !api_secret) && process.env.CLOUDINARY_URL) {
+    try {
+      const url = new URL(cleanEnv(process.env.CLOUDINARY_URL));
+      if (url.protocol === 'cloudinary:') {
+        api_key = api_key || decodeURIComponent(url.username);
+        api_secret = api_secret || decodeURIComponent(url.password);
+        cloud_name = cloud_name || url.hostname;
+      }
+    } catch {
+      const match = cleanEnv(process.env.CLOUDINARY_URL).match(/cloudinary:\/\/([^:]+):([^@]+)@(.+)/);
+      if (match) {
+        api_key = api_key || match[1];
+        api_secret = api_secret || match[2];
+        cloud_name = cloud_name || match[3];
+      }
+    }
+  }
+
+  // Specifically track which required variables are missing
+  const missing: string[] = [];
+  if (!cloud_name) missing.push('CLOUDINARY_CLOUD_NAME');
+  if (!api_key) missing.push('CLOUDINARY_API_KEY');
+  if (!api_secret) missing.push('CLOUDINARY_API_SECRET');
+
+  if (missing.length > 0) {
     throw new Error(
-      'Cloudinary is not properly configured. Please set valid CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your environment variables.'
+      `Missing required Cloudinary environment variable(s): ${missing.join(', ')}. Please verify that ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} configured in your Vercel project environment variables (Production & Preview).`
     );
   }
 
+  // Always reconfigure Cloudinary cleanly before operations
   cloudinary.config({
     cloud_name,
     api_key,
@@ -47,15 +75,6 @@ export function getCloudinaryConfig() {
   return { cloud_name, api_key, api_secret };
 }
 
-// Initial config attempt (safe on cold-start)
-if (process.env.CLOUDINARY_CLOUD_NAME) {
-  try {
-    getCloudinaryConfig();
-  } catch {
-    // ignore on cold-start if environment variables are not yet loaded
-  }
-}
-
 /**
  * Upload an image file (File, Blob, base64 Data URI, or URL) directly to Cloudinary without writing to local disk.
  * Fully compatible with Vercel serverless Node runtime.
@@ -64,7 +83,7 @@ export async function uploadToCloudinary(
   file: File | Blob | string,
   folder: string = 'a7med-arcade'
 ): Promise<CloudinaryUploadResult> {
-  // Ensure trimmed credentials are used
+  // Read and configure credentials fresh at runtime
   getCloudinaryConfig();
 
   // 1. Handle string input (base64 Data URI or remote URL)

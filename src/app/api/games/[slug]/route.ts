@@ -158,10 +158,11 @@ export async function PUT(
       game: updated,
       message: 'Game updated successfully'
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('API Error in PUT /api/games/[slug]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update game';
     return NextResponse.json(
-      { success: false, error: 'Failed to update game' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

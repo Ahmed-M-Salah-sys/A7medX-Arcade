@@ -203,10 +203,11 @@ export async function POST(request: NextRequest) {
       { success: true, game: createdGame, message: 'Game published successfully!' },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('API Error in POST /api/games:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to publish game';
     return NextResponse.json(
-      { success: false, error: 'Failed to publish game' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
